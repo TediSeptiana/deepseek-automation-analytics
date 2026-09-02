@@ -19,7 +19,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     browser_service = DeepSeekBrowserService.get_instance()
     
     # Inisialisasi Browser di Background Task agar Startup FastAPI tidak terblokir
-    asyncio.create_task(browser_service.initialize())
+    asyncio.create_task(browser_service.initialize_deepseek())
 
     yield
 

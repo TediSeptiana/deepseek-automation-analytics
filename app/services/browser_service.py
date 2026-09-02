@@ -47,7 +47,60 @@ class DeepSeekBrowserService:
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
+    
+    async def _wait_for_response_completion(
+        self,
+        timeout: float = 120.0,
+        stable_time: float = 2.0,
+        poll_interval: float = 0.5,
+    ) -> str:
+        """Menunggu sampai teks response DeepSeek berhenti berubah."""
 
+        if not self.page:
+            raise RuntimeError("Browser page belum tersedia.")
+
+        locator = self.page.locator(".ds-markdown")
+
+        loop = asyncio.get_running_loop()
+        start_time = loop.time()
+
+        previous_text = ""
+        stable_since: float | None = None
+
+        while True:
+            elapsed = loop.time() - start_time
+
+            if elapsed >= timeout:
+                raise TimeoutError(
+                    f"Timeout menunggu response DeepSeek selesai "
+                    f"setelah {timeout} detik."
+                )
+
+            responses = await locator.all_text_contents()
+
+            if not responses:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            current_text = responses[-1].strip()
+
+            if not current_text:
+                await asyncio.sleep(poll_interval)
+                continue
+
+            # Response berubah → masih generating
+            if current_text != previous_text:
+                previous_text = current_text
+                stable_since = loop.time()
+
+            # Response tidak berubah selama stable_time
+            elif stable_since is not None:
+                stable_duration = loop.time() - stable_since
+
+                if stable_duration >= stable_time:
+                    return current_text
+
+            await asyncio.sleep(poll_interval)
     async def initialize_deepseek(self) -> None:
         """Inisialisasi Playwright Context dan Melakukan Sesi Check/Login."""
         settings.ensure_directories()
@@ -154,11 +207,8 @@ class DeepSeekBrowserService:
             self.status = ServiceStatusEnum.READY
 
     async def send_prompt(self, prompt: str) -> tuple[str, bool]:
-        """Mengirimkan prompt ke DeepSeek dan mengembalikan respon.
+        """Mengirimkan prompt ke DeepSeek dan menunggu response selesai."""
 
-        Menunggu secara otomatis hingga browser siap (READY).
-        """
-        # Tunggu hingga proses inisialisasi awal selesai
         await self._ready_event.wait()
 
         if self.status == ServiceStatusEnum.HUMAN_INTERVENTION_REQUIRED:
@@ -172,8 +222,15 @@ class DeepSeekBrowserService:
 
         self.sequence_counter += 1
 
-        print(f"[API EXEC] Sending Prompt #{self.sequence_counter}: '{prompt}'")
-        chat_input = self.page.get_by_role("textbox", name="Message DeepSeek")
+        print(
+            f"[API EXEC] Sending Prompt #{self.sequence_counter}: '{prompt}'"
+        )
+
+        chat_input = self.page.get_by_role(
+            "textbox",
+            name="Message DeepSeek",
+        )
+
         await chat_input.click()
         await chat_input.fill(prompt)
         await chat_input.press("Enter")
@@ -181,26 +238,30 @@ class DeepSeekBrowserService:
         await asyncio.sleep(2)
 
         if await self._check_is_captcha_present():
-            asyncio.create_task(self._wait_for_captcha_resolution_if_any())
+            asyncio.create_task(
+                self._wait_for_captcha_resolution_if_any()
+            )
+
             return (
-                "Terdeteksi CAPTCHA/Cloudflare! Silakan selesaikan verifikasi di browser.",
+                "Terdeteksi CAPTCHA/Cloudflare! "
+                "Silakan selesaikan verifikasi di browser.",
                 True,
             )
 
-        # Tunggu balasan AI muncul
-        await self.page.wait_for_selector(".ds-markdown", timeout=45000)
-        await asyncio.sleep(3)
+        print("[API EXEC] Menunggu response DeepSeek selesai...")
 
-        responses = await self.page.locator(".ds-markdown").all_text_contents()
-        last_response = (
-            responses[-1] if responses else "No response generated."
-        )
+        last_response = await self._wait_for_response_completion()
 
         ExporterService.export(
             prompt=prompt,
             response=last_response,
             session_id=self.current_session_id,
             seq_idx=self.sequence_counter,
+        )
+
+        print(
+            f"[API EXEC] Response selesai: "
+            f"{len(last_response)} karakter"
         )
 
         return last_response, False
