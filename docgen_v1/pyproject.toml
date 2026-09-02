@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docgen"
+version = "0.1.0"
+description = "Modular Python documentation generator using a local LLM over aiohttp."
+requires-python = ">=3.11"
+dependencies = ["aiohttp>=3.9,<4"]
+
+[project.scripts]
+docgen = "docgen.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
