@@ -1,0 +1,27 @@
+# Environment & secrets
+.env
+
+# DeepSeek browser session / cookies
+data/state/
+**/*state*.json
+
+# Runtime logs
+data/log/
+data/json/
+
+# Raw/generated data
+data/raw/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
