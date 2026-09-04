@@ -10,6 +10,21 @@ import uvicorn
 from fastapi import FastAPI
 from app.routers import chat_router
 from app.services.browser_service import DeepSeekBrowserService
+from fastapi import FastAPI
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from app.routers import chat_router
+
+app = FastAPI(title="DeepSeek Automation API")
+
+# Konfigurasi global rate limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Daftarkan router
+app.include_router(chat_router.router)
 
 
 @asynccontextmanager
