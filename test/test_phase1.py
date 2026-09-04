@@ -61,6 +61,7 @@ async def test_post_chat_valid_api_key(async_client: httpx.AsyncClient) -> None:
     data = response.json()
     assert "status" in data
     assert "response" in data
+    print(response.json())
 
 
 # ==========================================
